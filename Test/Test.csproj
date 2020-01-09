@@ -5,11 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluentCommandLineParser" Version="1.4.3" />
     <PackageReference Include="Microsoft.ML" Version="1.1.0" />
     <PackageReference Include="Microsoft.ML.FastTree" Version="1.1.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.9.0" />
-    <PackageReference Include="mzLib" Version="1.0.454" />
+    <PackageReference Include="mzLib" Version="1.0.463" />
     <PackageReference Include="NUnit" Version="3.11.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="3.11.2" />
     <PackageReference Include="SharpLearning.Common.Interfaces" Version="0.26.9" />
@@ -146,6 +145,9 @@
     <None Update="TestVariantDb.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="TestVariantDb_ambiguous.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="TestVariantDb_conservativeDeletion.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -167,6 +169,9 @@
     <None Update="TestVariantDb_missense.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="TestVariantDb_SNVmissense.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="TestVariantDb_stopGained.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -185,7 +190,10 @@
     <None Update="VariantSearchTaskconfig.toml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="XlTestData\10226.mzML">
+    <None Update="XlTestData\2017-11-21_XL_DSSO_Ribosome_RT60min_28800-28898.mzML">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="XlTestData\ms2ms3mixed_10226.mzML">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="XlTestData\BSA_DSSO_29061.mgf">
@@ -193,6 +201,9 @@
     </None>
     <None Update="XlTestData\ms2mixed_bsa_xlink.mzML">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="XlTestData\RibosomeGO.fasta">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="XlTestData\yeast_glycan_25170.mgf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
