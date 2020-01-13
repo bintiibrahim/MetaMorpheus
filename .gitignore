@@ -231,3 +231,5 @@ _Pvt_Extensions
 
 # FAKE - F# Make
 .fake/
+/EngineLayer/Data
+/Test/TestData/2020-01-12-11-08-25/Task Settings

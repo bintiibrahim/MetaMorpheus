@@ -161,6 +161,7 @@ namespace EngineLayer.FdrAnalysis
                 {
                     myAnalysisResults.BinarySearchTreeMetrics = PEP_Analysis.ComputePEPValuesForAllPSMsGeneric(AllPsms);
                     Compute_PEPValue_Based_QValue(AllPsms);
+                    ProteinProbability.CalculateProteinProbabilities(AllPsms); // temporary, for testing only
                 }
             }
 
@@ -168,6 +169,8 @@ namespace EngineLayer.FdrAnalysis
             {
                 Compute_PEPValue_Based_QValue(AllPsms);
             }
+
+
         }
 
         public static void Compute_PEPValue_Based_QValue(List<PeptideSpectralMatch> psms)

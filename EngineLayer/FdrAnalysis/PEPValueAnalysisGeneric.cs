@@ -96,6 +96,8 @@ namespace EngineLayer
                         var pepValuePrediction = predictionEngine.Predict(pd);
                         pepValuePredictions.Add(pepValuePrediction.Probability);
                         //A score is available using the variable pepvaluePrediction.Score
+
+                        psm.FdrInfo.PeptidePEP.Add(Peptide, pepValuePrediction.Probability);
                     }
 
                     double highestPredictedPEPValue = pepValuePredictions.Max();
@@ -117,6 +119,7 @@ namespace EngineLayer
                         if (indiciesOfPeptidesToRemove.Contains(index))
                         {
                             bestMatchingPeptidesToRemove.Add((Notch, Peptide));
+                            psm.FdrInfo.PeptidePEP.Remove(Peptide);
                         }
                         index++;
                     }
