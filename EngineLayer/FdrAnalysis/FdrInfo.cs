@@ -1,7 +1,4 @@
-﻿using Proteomics.ProteolyticDigestion;
-using System.Collections.Generic;
-
-namespace EngineLayer.FdrAnalysis
+﻿namespace EngineLayer.FdrAnalysis
 {
     public class FdrInfo
     {
@@ -13,6 +10,5 @@ namespace EngineLayer.FdrAnalysis
         public double QValueNotch { get; set; }
         public double PEP { get; set; }
         public double PEP_QValue { get; set; }
-        public Dictionary<PeptideWithSetModifications, double> PeptidePEP { get; set; }
     }
 }

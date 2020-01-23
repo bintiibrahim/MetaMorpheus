@@ -20,7 +20,8 @@ namespace TaskLayer
             Parameters = parameters;
             CommonParameters = commonParameters;
 
-            // 1. filter to get best (highest-scoring) PSM per peptide (copied from post-search analysis task)
+            // commented out for now because this step is done in post search analysis
+            // 1. filter to get best (highest-scoring) PSM per peptide (copied from post-search analysis)
             //List<PeptideSpectralMatch> peptides = Parameters.AllPsms.GroupBy(b => b.FullSequence).Select(b => b.FirstOrDefault()).ToList(); // mod peptides are treated as different peptides
 
             //new FdrAnalysisEngine(peptides, Parameters.NumNotches, CommonParameters, new List<string> { Parameters.SearchTaskId }, "Peptide").Run();
@@ -52,48 +53,54 @@ namespace TaskLayer
                         peptidesForProteins.Add(protein, new List<PeptideSpectralMatch> { bestScoringPsm });
                     }
 
-                    if (proteinsForPeptides.TryGetValue(bestScoringPsm.FullSequence, out List<Protein> proteinsForThisPeptide))
+
+                    if (proteinsForPeptides.TryGetValue(GetSequence(bestScoringPsm), out List<Protein> proteinsForThisPeptide))
                     {
                         proteinsForThisPeptide.Add(protein);
                     }
                     else
                     {
-                        proteinsForPeptides.Add(bestScoringPsm.FullSequence, new List<Protein> { protein });
+                        proteinsForPeptides.Add((GetSequence(bestScoringPsm)), new List<Protein> { protein });
                     }
                 }
             }
 
-            // 4. compute protein probabilities for proteins with unique peptides only (for now)
+            // 3. compute protein probabilities for proteins with unique peptides only (for now)
             var proteinProbabilities = new Dictionary<Protein, double>();
             foreach (var kvp in peptidesForProteins)
             {
-                // 4a. exclude shared peptides
-                var uniquePeptidesForThisProtein = kvp.Value.Where(peptide => proteinsForPeptides[peptide.FullSequence].Count == 1);
+                // 3a. exclude shared peptides
+                var uniquePeptidesForThisProtein = kvp.Value.Where(p => proteinsForPeptides[GetSequence(p)].Count == 1);
 
-                // 4b. find probability of incorrect peptides for this protein i.e. the product of PEPs
+                // 3b. find probability of incorrect peptides for this protein i.e. the product of PEPs
                 double probabilityIncorrectPeptides = uniquePeptidesForThisProtein.Select(p => p.FdrInfo.PEP).Aggregate(1.0, (acc, val) => acc * val);
 
-                // 4c. find the probability of protein i.e. at least 1 correct peptide
+                // 3c. find the probability of protein i.e. at least 1 correct peptide
                 double proteinProbabiity = 1 - probabilityIncorrectPeptides;
 
                 proteinProbabilities.Add(kvp.Key, proteinProbabiity);
             }
 
-            // 5. Write to file
-            WriteToFile(Path.Combine(Parameters.OutputFolder, "ProteinProbabilities"), proteinProbabilities);
+            // 4. Write results to file
+            WriteToFile(Path.Combine(Parameters.OutputFolder, "ProteinProbabilities"), proteinProbabilities, peptidesForProteins);
 
         }
 
-        private static void WriteToFile(string filePath, Dictionary<Protein, double> proteinProbabilites)
+        private static void WriteToFile(string filePath, Dictionary<Protein, double> proteinProbabilites, Dictionary<Protein, List<PeptideSpectralMatch>> peptidesForProteins)
         {
             using (StreamWriter output = new StreamWriter(filePath))
             {
-                output.WriteLine(PeptideSpectralMatch.GetTabSeparatedHeader());
                 foreach (var kvp in proteinProbabilites)
                 {
-                    output.WriteLine(string.Join("\t", new string[] { kvp.Key.ToString(), kvp.Value.ToString() }));
+                    string peptidesForThisProtein = string.Join(",", peptidesForProteins[kvp.Key].Select(p => GetSequence(p)));
+                    output.WriteLine(string.Join("\t", new string[] { kvp.Key.ToString(), peptidesForThisProtein, kvp.Value.ToString() }));
                 }
             }
+        }
+
+        private static string GetSequence(PeptideSpectralMatch psm)
+        {
+            return psm.FullSequence ?? string.Join("|", psm.BestMatchingPeptides.Select(pep => pep.Peptide.FullSequence));
         }
 
     }
