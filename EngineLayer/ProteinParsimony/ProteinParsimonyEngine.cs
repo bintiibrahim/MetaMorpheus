@@ -1,4 +1,5 @@
-﻿using EngineLayer.ProteinParsimony;
+﻿using EngineLayer.FdrAnalysis;
+using EngineLayer.ProteinParsimony;
 using Proteomics;
 using Proteomics.ProteolyticDigestion;
 using System.Collections.Concurrent;
@@ -16,6 +17,7 @@ namespace EngineLayer
         private readonly HashSet<PeptideWithSetModifications> _fdrFilteredPeptides;
         private readonly List<PeptideSpectralMatch> _fdrFilteredPsms;
         private readonly List<PeptideSpectralMatch> _allPsms;
+        private readonly List<PeptideSpectralMatch> _bestScoringPsms;
         private const double FdrCutoffForParsimony = 0.01;
 
         /// <summary>
@@ -74,7 +76,17 @@ namespace EngineLayer
 
             // we're storing all PSMs (not just FDR-filtered ones) here because we will remove some protein associations 
             // from low-confidence PSMs if they can be explained by a parsimonious protein
-            _allPsms = allPsms;
+            _allPsms = allPsms;    
+
+            // only want best scoring psms to compute protein probabilities
+            if (_treatModPeptidesAsDifferentPeptides)
+            {
+                _bestScoringPsms = _fdrFilteredPsms.GroupBy(b => b.FullSequence).Select(b => b.FirstOrDefault()).ToList();
+            }
+            else
+            {
+                _bestScoringPsms = _fdrFilteredPsms.GroupBy(b => b.BaseSequence).Select(b => b.FirstOrDefault()).ToList();
+            }
         }
 
         protected override MetaMorpheusEngineResults RunSpecific()
@@ -84,6 +96,11 @@ namespace EngineLayer
             myAnalysisResults.ProteinGroups = RunProteinParsimonyEngine();
 
             return myAnalysisResults;
+        }
+
+        private static string GetSequence(PeptideSpectralMatch psm)
+        {
+            return psm.FullSequence ?? string.Join("|", psm.BestMatchingPeptides.Select(pep => pep.Peptide.FullSequence));
         }
 
         /// <summary>
@@ -103,6 +120,42 @@ namespace EngineLayer
             if (_fdrFilteredPeptides.Count == 0)
             {
                 return new List<ProteinGroup>();
+            }
+
+            // Pre-parsimony: Compute protein probabilities
+            var peptidesForProteins = new Dictionary<Protein, List<PeptideSpectralMatch>>();
+            var proteinsForPeptides = new Dictionary<string, List<Protein>>();
+
+            foreach (PeptideSpectralMatch bestScoringPsm in _bestScoringPsms)
+            {
+                foreach (Protein protein in bestScoringPsm.BestMatchingPeptides.Select(p => p.Peptide.Protein))
+                {
+                    if (peptidesForProteins.TryGetValue(protein, out List<PeptideSpectralMatch> peptidesForThisProtein))
+                    {
+                        peptidesForThisProtein.Add(bestScoringPsm);
+                    }
+                    else
+                    {
+                        peptidesForProteins.Add(protein, new List<PeptideSpectralMatch> { bestScoringPsm });
+                    }
+
+
+                    if (proteinsForPeptides.TryGetValue(GetSequence(bestScoringPsm), out List<Protein> proteinsForThisPeptide))
+                    {
+                        proteinsForThisPeptide.Add(protein);
+                    }
+                    else
+                    {
+                        proteinsForPeptides.Add((GetSequence(bestScoringPsm)), new List<Protein> { protein });
+                    }
+                }
+            }
+
+            foreach (var kvp in peptidesForProteins)
+            {
+                var uniquePeptidesForThisProtein = kvp.Value.Where(p => proteinsForPeptides[GetSequence(p)].Count == 1);
+                double probabilityIncorrectPeptides = uniquePeptidesForThisProtein.Select(p => p.FdrInfo.PEP).Aggregate(1.0, (acc, val) => acc * val);
+                kvp.Key.Probability = 1 - probabilityIncorrectPeptides; // todo in mzLib
             }
 
             // Parsimony stage 0: create peptide-protein associations if needed because the user wants a modification-agnostic parsimony

@@ -65,6 +65,19 @@ namespace TaskLayer
                 }
             }
 
+            //// calculate NSP for all peptides
+            //foreach (var kvp in peptidesForProteins.Where(p => p.Value.Count > 1))
+            //{
+            //    var peptidesForThisProtein = new List<PeptideSpectralMatch>(kvp.Value);
+            //    foreach (var peptide in kvp.Value)
+            //    {
+            //        var neighborPeptides = new List<PeptideSpectralMatch>(kvp.Value);
+            //        neighborPeptides.Remove(peptide);
+
+            //        peptide.NSP = neighborPeptides.Select(n => n.FdrInfo.PEP).Aggregate(0.0, (acc, val) => acc + val);
+            //    }
+            //}
+
             // 3. compute protein probabilities for proteins with unique peptides only (for now)
             var proteinProbabilities = new Dictionary<Protein, double>();
             foreach (var kvp in peptidesForProteins)

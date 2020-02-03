@@ -914,9 +914,6 @@ namespace TaskLayer
             }
             peptides.RemoveAll(p => p.FdrInfo.QValue > CommonParameters.QValueOutputFilter);
 
-            // temporary for testing
-            ProteinProbability.CalculateProteinProbabilities(Parameters, CommonParameters, peptides);
-
             WritePsmsToTsv(peptides, writtenFile, Parameters.SearchParameters.ModsToWriteSelection);
             FinishedWritingFile(writtenFile, new List<string> { Parameters.SearchTaskId });
             
