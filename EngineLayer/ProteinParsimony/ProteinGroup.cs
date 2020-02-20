@@ -25,6 +25,7 @@ namespace EngineLayer
             BestPeptideScore = 0;
             QValue = 0;
             PValue = 0;
+            Probability = 0;
             IsDecoy = false;
             IsContaminant = false;
             ModsInfo = new List<string>();
@@ -73,8 +74,10 @@ namespace EngineLayer
 
         public double PValue { get; set; }
 
+        public double Probability { get; set; }
+
         public double BestPeptideQValue { get; set; }
-        
+
         public double BestPeptideScore { get; set; }
 
         public int CumulativeTarget { get; set; }
