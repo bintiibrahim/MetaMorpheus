@@ -1,7 +1,6 @@
 ﻿using EngineLayer.FdrAnalysis;
 using Microsoft.ML;
 using Microsoft.ML.Data;
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -115,11 +114,13 @@ namespace EngineLayer
             int totalPeptideCount = 0;
             double sequenceCoverageFraction = 0.0;
             int numProteinAccessions = 0;
+            double bestScore = 0;
 
             percentageUnique = (double)pg.UniquePeptides.Count / pg.AllPeptides.Count;
             totalPeptideCount = pg.AllPeptides.Count;
             sequenceCoverageFraction = pg.SequenceCoverageFraction.First();
             numProteinAccessions = pg.Proteins.Count;
+            bestScore = pg.BestPeptideScore; 
 
             List<PeptideSpectralMatch> peptides;
             if (treatModPeptidesDifferent)
@@ -131,6 +132,7 @@ namespace EngineLayer
                 peptides = pg.AllPsmsBelowOnePercentFDR.GroupBy(b => b.BaseSequence).Select(b => b.FirstOrDefault()).ToList();
             }
 
+            // compute average PEP
             double sumPEP = 0.0;
             foreach (PeptideSpectralMatch peptide in peptides)
             {
@@ -144,6 +146,53 @@ namespace EngineLayer
 
             averagePEP = sumPEP / peptides.Count;
 
+            // find longest peptide series
+            int numPeptidesInSeries = 0;
+            int longestSeries = 0;
+
+            var oneBasedResidues = new List<(int, int)>(); // !treatModAsDifferent
+            foreach (var peptide in pg.AllPeptides)
+            {
+                (int, int) pepResidue = (peptide.OneBasedStartResidueInProtein, peptide.OneBasedEndResidueInProtein);
+
+                if (!oneBasedResidues.Contains(pepResidue))
+                {
+                    oneBasedResidues.Add(pepResidue);
+                }
+            }
+
+            // todo: add more weight if unique peptide
+            //var oneBasedUniqueResidues = new List<(int, int)>();
+            //foreach (var peptide in pg.UniquePeptides)
+            //{
+            //    (int, int) uniqueRes = (peptide.OneBasedStartResidueInProtein, peptide.OneBasedEndResidueInProtein);
+
+            //    if (!oneBasedUniqueResidues.Contains(uniqueRes))
+            //    {
+            //        oneBasedUniqueResidues.Add(uniqueRes);
+            //    }
+            //}
+
+            var orderedOneBasedResidues = oneBasedResidues.OrderBy(t => t.Item1).ToList(); // order by start residue
+            for (int i = 0; i < orderedOneBasedResidues.Count() - 1; ++i)
+            {
+                var current = orderedOneBasedResidues[i];
+                var next = orderedOneBasedResidues[i + 1]; // fixme
+
+                // succeeding peptide match overlaps or comes right after
+                if (next.Item1 - current.Item2 <= 1)
+                {
+                    ++numPeptidesInSeries;
+                }
+                else
+                {
+                    longestSeries = numPeptidesInSeries > longestSeries ? numPeptidesInSeries : longestSeries; // update longest peptide series
+                    numPeptidesInSeries = i + 1 < (orderedOneBasedResidues.Count - 1) ? 0 : numPeptidesInSeries; 
+                }
+            }
+
+            // todo: normalize/standardize
+
             return new ProteinData
             {
                 AveragePEP = (float)averagePEP,
@@ -151,6 +200,8 @@ namespace EngineLayer
                 TotalPeptideCount = totalPeptideCount,
                 PercentageSequenceCoverage = (float)sequenceCoverageFraction,
                 NumProteinAccessions = numProteinAccessions,
+                BestScore = (float)bestScore,
+                LongestPepSeries = longestSeries,
                 Label = label
             };
         }
@@ -160,14 +211,22 @@ namespace EngineLayer
     public class ProteinData
     {
         // todo: identify features to train the model on
-        //public static readonly string[] featuresForTraining = new string[] { "AveragePEP", "PercentageOfUniquePeptides", "TotalPeptideCount", "PercentageSequenceCoverage", "NumProteinAccessions" };
-        public static readonly string[] featuresForTraining = new string[] { "AveragePEP", "PercentageOfUniquePeptides", "TotalPeptideCount" };
+        public static readonly string[] featuresForTraining = new string[] { "AveragePEP", "PercentageOfUniquePeptides", "TotalPeptideCount", "PercentageSequenceCoverage", "NumProteinAccessions", "BestScore", "LongestPepSeries" };
 
         public float AveragePEP { get; set; }
+
         public float PercentageOfUniquePeptides { get; set; }
+
         public float TotalPeptideCount { get; set; }
+
         public float PercentageSequenceCoverage { get; set; }
+
         public float NumProteinAccessions { get; set; }
+
+        public float BestScore { get; set; }
+
+        public float LongestPepSeries { get; set; }
+
         public bool Label { get; set; }
     }
 }
