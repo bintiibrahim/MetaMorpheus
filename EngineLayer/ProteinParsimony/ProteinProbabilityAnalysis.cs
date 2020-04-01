@@ -1,7 +1,9 @@
 ﻿using EngineLayer.FdrAnalysis;
 using Microsoft.ML;
 using Microsoft.ML.Data;
+using Proteomics;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using static Microsoft.ML.DataOperationsCatalog;
@@ -12,11 +14,15 @@ namespace EngineLayer
     {
         private const double PeptidePValueCutoff = 0.0;
 
-        public static string ComputeProteinProbabilities(List<ProteinGroup> proteinGroups, bool modPeptidesAreDifferent)
+        public static string ComputeProteinProbabilities(List<ProteinGroup> proteinGroups, bool modPeptidesAreDifferent, string filePath)
         {
             // create ML context
             MLContext mlContext = new MLContext();
-            IDataView dataView = mlContext.Data.LoadFromEnumerable(CreateProteinData(proteinGroups, modPeptidesAreDifferent));
+            var proteinData = CreateProteinData(proteinGroups, modPeptidesAreDifferent);
+            IDataView dataView = mlContext.Data.LoadFromEnumerable(proteinData.AsEnumerable());
+
+            // write training features
+            WriteProteinDataToTsv(proteinData, filePath);
 
             // split data into train and test
             TrainTestData trainTestSplit = mlContext.Data.TrainTestSplit(dataView, testFraction: 0.1, null, 42);
@@ -81,7 +87,7 @@ namespace EngineLayer
         }
 
         // build the protein data set that we will feed into the model
-        public static IEnumerable<ProteinData> CreateProteinData(List<ProteinGroup> proteinGroups, bool treatModPeptidesDifferent)
+        public static List<ProteinData> CreateProteinData(List<ProteinGroup> proteinGroups, bool treatModPeptidesDifferent)
         {
             List<ProteinData> proteinDataList = new List<ProteinData>();
 
@@ -103,7 +109,7 @@ namespace EngineLayer
                 }
             }
 
-            return proteinDataList.AsEnumerable();
+            return proteinDataList;
         }
 
         // each entry contains information about the protein and its features
@@ -148,85 +154,88 @@ namespace EngineLayer
 
             // find longest peptide series
             int numPeptidesInSeries = 0;
-            int longestSeries = 0;
+            int series = 0;
 
-            var oneBasedResidues = new List<(int, int)>(); // !treatModAsDifferent
-            foreach (var peptide in pg.AllPeptides)
+            var oneBasedResiduesByProtein = new Dictionary<Protein, HashSet<(int, int)>>();
+            foreach (var psm in pg.AllPsmsBelowOnePercentFDR)
             {
-                (int, int) pepResidue = (peptide.OneBasedStartResidueInProtein, peptide.OneBasedEndResidueInProtein);
-
-                if (!oneBasedResidues.Contains(pepResidue))
+                if (psm.BaseSequence != null)
                 {
-                    oneBasedResidues.Add(pepResidue);
+                    foreach (var pep in psm.BestMatchingPeptides.Select(p => p.Peptide))
+                    {
+                        if (pg.Proteins.Contains(pep.Protein))
+                        {
+                            (int, int) uniqueRes = (pep.OneBasedStartResidueInProtein, pep.OneBasedEndResidueInProtein);
+
+                            if (oneBasedResiduesByProtein.TryGetValue(pep.Protein, out HashSet<(int,int)> oneBasedResidues))
+                            {
+                                oneBasedResidues.Add(uniqueRes);
+                            }
+                            else
+                            {
+                                oneBasedResiduesByProtein.Add(pep.Protein, new HashSet<(int, int)> { uniqueRes });
+                            }
+                        }
+                    }
                 }
             }
 
-            // todo: add more weight if unique peptide
-            //var oneBasedUniqueResidues = new List<(int, int)>();
-            //foreach (var peptide in pg.UniquePeptides)
-            //{
-            //    (int, int) uniqueRes = (peptide.OneBasedStartResidueInProtein, peptide.OneBasedEndResidueInProtein);
-
-            //    if (!oneBasedUniqueResidues.Contains(uniqueRes))
-            //    {
-            //        oneBasedUniqueResidues.Add(uniqueRes);
-            //    }
-            //}
-
-            var orderedOneBasedResidues = oneBasedResidues.OrderBy(t => t.Item1).ToList(); // order by start residue
-            for (int i = 0; i < orderedOneBasedResidues.Count() - 1; ++i)
+            // weigh unique and shared peptides equally
+            var longestPeptideSeries = new List<double>();
+            foreach (var prot in pg.Proteins)
             {
-                var current = orderedOneBasedResidues[i];
-                var next = orderedOneBasedResidues[i + 1]; // fixme
+                var orderedOneBasedResidues = oneBasedResiduesByProtein[prot].OrderBy(t => t.Item1).ToList(); // order by start residue
+                for (int i = 0; i < orderedOneBasedResidues.Count() - 1; ++i)
+                {
+                    var current = orderedOneBasedResidues[i];
+                    var next = orderedOneBasedResidues[i + 1]; // fixme
 
-                // succeeding peptide match overlaps or comes right after
-                if (next.Item1 - current.Item2 <= 1)
-                {
-                    ++numPeptidesInSeries;
+                    // succeeding peptide match overlaps or comes right after
+                    if (next.Item1 - current.Item2 <= 1)
+                    {
+                        ++numPeptidesInSeries;
+                    }
+                    else
+                    {
+                        series = numPeptidesInSeries > series ? numPeptidesInSeries : series; // update longest peptide series
+                        numPeptidesInSeries = i + 1 < (orderedOneBasedResidues.Count - 1) ? 0 : numPeptidesInSeries;
+                    }
                 }
-                else
-                {
-                    longestSeries = numPeptidesInSeries > longestSeries ? numPeptidesInSeries : longestSeries; // update longest peptide series
-                    numPeptidesInSeries = i + 1 < (orderedOneBasedResidues.Count - 1) ? 0 : numPeptidesInSeries; 
-                }
+
+                longestPeptideSeries.Add((double)series / prot.Accession.Length);
             }
-
-            // todo: normalize/standardize
 
             return new ProteinData
             {
+                ProteinGroupName = string.Join("|", pg.Proteins.OrderBy(p => p.Accession).Select(p => p.Accession)),
                 AveragePEP = (float)averagePEP,
                 PercentageOfUniquePeptides = (float)percentageUnique,
                 TotalPeptideCount = totalPeptideCount,
                 PercentageSequenceCoverage = (float)sequenceCoverageFraction,
                 NumProteinAccessions = numProteinAccessions,
-                BestScore = (float)bestScore,
-                LongestPepSeries = longestSeries,
+                BestPeptideScore = (float)bestScore,
+                LongestPepSeries = (float)longestPeptideSeries.Max(),
+                IsDecoy = pg.IsDecoy,
+                IsContaminant = pg.IsContaminant,
+                QValue = pg.QValue,
                 Label = label
             };
         }
 
-    }
+        private static void WriteProteinDataToTsv(List<ProteinData> proteinData, string filePath)
+        {
+            if (proteinData != null && proteinData.Any())
+            {
+                using (StreamWriter output = new StreamWriter(filePath))
+                {
+                    output.WriteLine(proteinData.First().GetTabSeparatedHeader());
+                    foreach (ProteinData pd in proteinData)
+                    {
+                        output.WriteLine(pd);
+                    }
+                }
+            }
+        }
 
-    public class ProteinData
-    {
-        // todo: identify features to train the model on
-        public static readonly string[] featuresForTraining = new string[] { "AveragePEP", "PercentageOfUniquePeptides", "TotalPeptideCount", "PercentageSequenceCoverage", "NumProteinAccessions", "BestScore", "LongestPepSeries" };
-
-        public float AveragePEP { get; set; }
-
-        public float PercentageOfUniquePeptides { get; set; }
-
-        public float TotalPeptideCount { get; set; }
-
-        public float PercentageSequenceCoverage { get; set; }
-
-        public float NumProteinAccessions { get; set; }
-
-        public float BestScore { get; set; }
-
-        public float LongestPepSeries { get; set; }
-
-        public bool Label { get; set; }
     }
 }

@@ -136,7 +136,7 @@ namespace TaskLayer
             ProteinGroups = proteinScoringAndFdrResults.SortedAndScoredProteinGroups;
 
             // calculate protein probabilities	
-            ProteinProbabilityAnalysis.ComputeProteinProbabilities(ProteinGroups, Parameters.SearchParameters.ModPeptidesAreDifferent);
+            ProteinProbabilityAnalysis.ComputeProteinProbabilities(ProteinGroups, Parameters.SearchParameters.ModPeptidesAreDifferent, Path.Combine(Parameters.OutputFolder, "ProteinFeatures.tsv"));
 
             foreach (PeptideSpectralMatch psm in Parameters.AllPsms)
             {

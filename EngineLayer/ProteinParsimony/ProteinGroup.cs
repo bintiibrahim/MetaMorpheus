@@ -161,6 +161,7 @@ namespace EngineLayer
             sb.Append("Best Peptide Score" + '\t');
             sb.Append("Best Peptide Notch QValue" + '\t');
             sb.Append("Protein P Value");
+            sb.Append("Protein Probability");
             return sb.ToString();
         }
 
@@ -313,8 +314,12 @@ namespace EngineLayer
             sb.Append(BestPeptideQValue);
             sb.Append("\t");
 
-            // best peptide q value
+            // protein p value
             sb.Append(PValue);
+            sb.Append("\t");
+
+            // protein probability ML
+            sb.Append(Probability);
             sb.Append("\t");
 
             return sb.ToString();
