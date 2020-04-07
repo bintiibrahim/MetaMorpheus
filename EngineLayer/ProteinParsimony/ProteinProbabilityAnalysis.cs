@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using static Microsoft.ML.DataOperationsCatalog;
 
 namespace EngineLayer
@@ -13,8 +14,9 @@ namespace EngineLayer
     public class ProteinProbabilityAnalysis
     {
         private const double PeptidePValueCutoff = 0.0;
+        private static List<string> ProteinIDs { get; set; }
 
-        public static string ComputeProteinProbabilities(List<ProteinGroup> proteinGroups, bool modPeptidesAreDifferent, string filePath)
+    public static string ComputeProteinProbabilities(List<ProteinGroup> proteinGroups, bool modPeptidesAreDifferent, string filePath, List<string> dbFileList, List<string> rawFileList)
         {
             // create ML context
             MLContext mlContext = new MLContext();
@@ -22,6 +24,7 @@ namespace EngineLayer
             IDataView dataView = mlContext.Data.LoadFromEnumerable(proteinData.AsEnumerable());
 
             // write training features
+            SetProteinIDs(dbFileList, rawFileList);
             WriteProteinDataToTsv(proteinData, filePath);
 
             // split data into train and test
@@ -222,6 +225,65 @@ namespace EngineLayer
             };
         }
 
+        private static string GetPrestFileName(string db)
+        {
+            return Regex.Replace(Path.GetFileNameWithoutExtension(db), @"prest_([a-z0-9]+)_", "");
+        }
+
+        private static void SetProteinIDs(List<string> dbFileList, List<string> rawFileList)
+        {
+            ProteinIDs = new List<string>();
+
+            // get runType
+            string runType = Path.GetFileNameWithoutExtension(rawFileList.First()).Replace("mixture", ""); // blank, A, B, or AB
+            runType = Regex.Replace(runType, @"rep[1-9]{1}", "");
+
+            var associatedProteinDBs = new List<string>();
+            switch (runType)
+            {
+                case "A":
+                    associatedProteinDBs.Add(dbFileList.Where(db => 
+                        GetPrestFileName(db).Equals("a")).First());
+                    goto case "blank";
+
+                case "B":
+                    associatedProteinDBs.Add(dbFileList.Where(db =>
+                       GetPrestFileName(db).Equals("b")).First());
+                    goto case "blank";
+
+                case "AB":
+                    associatedProteinDBs.AddRange(dbFileList.Where(db =>
+                       GetPrestFileName(db).Equals("a") ||
+                       GetPrestFileName(db).Equals("b")));
+                    goto case "blank";
+
+                case "blank":
+                    associatedProteinDBs.Add(dbFileList.Where(db =>
+                       GetPrestFileName(db).Equals("EColi")).First());
+                    break;
+            }
+
+            // if runType A, return A & EColi
+            // if runType B, return B & EColi
+            // if runType AB, return A & B & EColi
+            // if runType blank, return EColi
+            foreach (var dbFile in associatedProteinDBs)
+            {
+                string line;
+                using (StreamReader file = new StreamReader(dbFile))
+                {
+                    while ((line = file.ReadLine()) != null)
+                    {
+                        if (line.StartsWith(">"))
+                        {
+                            var proteinId = dbFile.Contains("EColi") ? line.Split("|")[1] : line.Substring(1);
+                            ProteinIDs.Add(proteinId);
+                        }
+                    }
+                }
+            }
+        }
+
         private static void WriteProteinDataToTsv(List<ProteinData> proteinData, string filePath)
         {
             if (proteinData != null && proteinData.Any())
@@ -231,6 +293,7 @@ namespace EngineLayer
                     output.WriteLine(proteinData.First().GetTabSeparatedHeader());
                     foreach (ProteinData pd in proteinData)
                     {
+                        pd.SetKnownLabel(ProteinIDs);
                         output.WriteLine(pd);
                     }
                 }

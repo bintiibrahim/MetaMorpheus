@@ -1,6 +1,10 @@
 ﻿using Proteomics;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
+using UsefulProteomicsDatabases;
 
 namespace EngineLayer
 {
@@ -28,12 +32,29 @@ namespace EngineLayer
 
         public bool Label { get; set; }
 
+        public bool ActualLabel { get; set; }
+
         public bool IsDecoy { get; set; }
 
         public bool IsContaminant { get; set; }
 
         public double QValue { get; set; }
 
+        public void SetKnownLabel(List<string> proteinIDs)
+        {
+            bool actual = true; // protein identified is absent
+
+            // FIXME handle indistinguishable protein groups differently
+            foreach (string id in ProteinGroupName.Split("|"))
+            {
+                if (!proteinIDs.Contains(id)) {
+                    actual = false;
+                }
+            }
+
+            ActualLabel = actual;
+        }
+        
         public string GetTabSeparatedHeader()
         {
             var sb = new StringBuilder();
@@ -48,6 +69,7 @@ namespace EngineLayer
             sb.Append("Q-Value" + '\t');
             sb.Append("Protein Decoy/Contaminant/Target" + '\t');
             sb.Append("Label" + '\t');
+            sb.Append("Actual Label" + '\t');
             return sb.ToString();
         }
 
@@ -108,6 +130,10 @@ namespace EngineLayer
 
             // training label
             sb.Append(Label);
+            sb.Append("\t");
+
+            // actual known label
+            sb.Append(ActualLabel);
             sb.Append("\t");
 
             return sb.ToString();
